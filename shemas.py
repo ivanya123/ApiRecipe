@@ -17,4 +17,4 @@ class RecipePy(BaseModel):
 
 
 class PrInProdPy(BaseModel):
-    products: list[tuple[int, float]] = [(1,23)]
+    products: list[tuple[int, float]] = []

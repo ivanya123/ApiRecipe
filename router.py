@@ -17,9 +17,9 @@ async def root():
 
 
 @router.post("/add_product")
-async def add_product_(product: Annotated[ProdPy, Depends()]):
+async def add_product_(product: ProdPy):
     my_product = await add_product(product)
-    return {"product_id": my_product}
+    return my_product
 
 
 @router.post("/add_recipe")
