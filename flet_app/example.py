@@ -1,35 +1,49 @@
 import flet as ft
 
+
 def main(page: ft.Page):
-    page.title = "MyApp"
+    def handle_change(e: ft.ControlEvent):
+        print(f"change on panel with index {e.data}")
 
-    def event(e):
-        if e.data == "close":
-            page.dialog = confirm_dialog
-            confirm_dialog.open = True
-            page.update()
-
-    page.window.prevent_close = True
-    page.window.on_event = event
-
-    def yes_click(e):
-        page.window.destroy()
-
-    def no_click(e):
-        confirm_dialog.open = False
+    def handle_delete(e: ft.ControlEvent):
+        panel.controls.remove(e.control.data)
         page.update()
 
-    confirm_dialog = ft.AlertDialog(
-        modal=True,
-        title=ft.Text("Please confirm"),
-        content=ft.Text("Do you really want to exit this app?"),
-        actions=[
-            ft.ElevatedButton("Yes", on_click=yes_click),
-            ft.OutlinedButton("No", on_click=no_click),
-        ],
-        actions_alignment=ft.MainAxisAlignment.END,
+    panel = ft.ExpansionPanelList(
+        expand_icon_color=ft.colors.BLUE_800,
+        elevation=8,
+        divider_color=ft.colors.RED_800,
+        on_change=handle_change,
+        controls=[
+            ft.ExpansionPanel(
+                # has no header and content - placeholders will be used
+                bgcolor=ft.colors.BLUE_400,
+                expanded=True,
+            )
+        ]
     )
 
-    page.add(ft.Text('Try exiting this app by clicking window\'s "Close" button!'))
+    colors = [
+        ft.colors.GREEN_500,
+        ft.colors.BLUE_800,
+        ft.colors.RED_800,
+    ]
 
-ft.app(main)
+    for i in range(3):
+        exp = ft.ExpansionPanel(
+            bgcolor=colors[i % len(colors)],
+            header=ft.ListTile(title=ft.Text(f"Panel {i}")),
+        )
+
+        exp.content = ft.ListTile(
+            title=ft.Text(f"This is in Panel {i}"),
+            subtitle=ft.Text(f"Press the icon to delete panel {i}"),
+            trailing=ft.IconButton(ft.icons.DELETE, on_click=handle_delete, data=exp),
+        )
+
+        panel.controls.append(exp)
+
+    page.add(panel)
+
+
+ft.app(target=main)

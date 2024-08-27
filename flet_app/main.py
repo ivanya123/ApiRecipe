@@ -9,48 +9,134 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
 
     data = requests.get("http://127.0.0.1:8000/list_recipes/all_recipe")
-    info = data.json()
+    info_recipe = data.json()
 
     data_products = requests.get("http://127.0.0.1:8000/list_recipes/all_product")
     info_products = data_products.json()
 
+    data_wait_change = requests.get("http://127.0.0.1:8000/list_recipes/get_change_recipe")
+    info_wait_change = data_wait_change.json()
+
+    def delete_wait_change(e):
+        pass
+
     # Создание вкладки "Все рецепты"
 
-    def add_clicked(e, description: str):
-        """
-        Функция для кнопки которая выводит описание рецепта.
-        :param e:
-        :param description:
-        :return:
-        """
-        new_list = container_list.copy()
-        new_list.append(ft.Text(f"{description}"))
-        recipe_tab.content = ft.Column(new_list)
-        page.update()
 
-    container_list = [
-        ft.Container(content=ft.Text(f"{recipe['title']}"),
-                     margin=5,
-                     padding=1,
-                     alignment=ft.alignment.top_left,
-                     width=100,
-                     height=30,
-                     border_radius=8,
-                     ink=True,
-                     on_click=lambda e, k=recipe["description"]: add_clicked(e, k)) for recipe in info
+    container_change_wait = [
+        ft.Container(
+            content=ft.Text(f"{change_recipe['id']}: {change_recipe['recipe']["title"]}",
+                            size=10,
+                            color=ft.colors.RED_400),
+            margin=5,
+            padding=1,
+            alignment=ft.alignment.top_left,
+            height=15,
+            border_radius=5,
+            ink=True,
+            on_long_press=lambda e: delete_wait_change(e))
+        for change_recipe in info_wait_change
     ]
 
-    recipe_tab = ft.Tab(text="Рецепты", content=ft.Column(container_list))
+    row_change_wait = ft.Row(controls=container_change_wait)
 
+    def recipe_expansion_tile(recipe_dict: dict[str, Any]) -> ft.ExpansionTile:
+        title = recipe_dict["title"]
+        description = recipe_dict["description"]
 
+        text_title = ft.TextField(f"{title}", disabled=True, expand=1, color=ft.colors.BLACK)
+        text_description = ft.TextField(f"{description}", disabled=True, expand=2, multiline=True,
+                                        label="Рецепт", color=ft.colors.BLACK, )
+
+        def product_listtile(product, count: int) -> ft.ListTile:
+            def delete_pr(e):
+                pass
+
+            if product["product"]["types"] == "liquid":
+                unit_of_measurement = "мл"
+            elif product["product"]["types"] == "weight":
+                unit_of_measurement = "г"
+            else:
+                unit_of_measurement = "шт"
+
+            name = product["product"]["name"]
+            quantity = product["quantity"]
+
+            listtile = ft.ListTile(
+                title=ft.Text(f"{count}: {name}-{quantity} {unit_of_measurement}", color=ft.colors.BLACK),
+                trailing=ft.IconButton(ft.icons.DELETE, disabled=True, on_click=delete_pr),
+                data=product,
+                disabled=True,
+                bgcolor=ft.colors.BLUE_200,
+                content_padding=1
+            )
+            return listtile
+
+        list_prod_listtile = [product_listtile(product, count+1) for count, product in enumerate(recipe_dict["products"])]
+        column_prod_listtile = ft.Column(controls=list_prod_listtile, spacing=5, expand=1)
+
+        expansion_tile = ft.ExpansionTile(
+            title=text_title,
+            expanded_alignment=ft.alignment.center,
+            controls=[
+                column_prod_listtile,
+                ft.Divider(height=5, color=ft.colors.BLACK),
+                text_description
+            ]
+        )
+        return expansion_tile
+
+    list_expansion_tile = [recipe_expansion_tile(recipe) for recipe in info_recipe]
+    list_expansion_tile.insert(0, row_change_wait)
+
+    final_column = ft.Column(controls=list_expansion_tile, scroll=ft.ScrollMode.ALWAYS)
+
+    recipe_tab = ft.Tab(text="Рецепты", content=final_column)
+
+    def update_recipe_tab():
+        info_recipe = requests.get("http://127.0.0.1:8000/list_recipes/all_recipe").json()
+        list_expansion_tile = [recipe_expansion_tile(recipe) for recipe in info_recipe]
+        list_expansion_tile.insert(0, row_change_wait)
+        final_column.controls = list_expansion_tile
+        page.update()
+    ####################################################################################################################
 
     # Создание вкладки добавление рецептов с функционалом
     # Функция доабвления продукта в базу данных через post запрос,
     # и обновление списка продуктов
 
     # Функция добавления продукта в рецепт.
-    def add_product(e):
-        print("Ничего не придумал")
+    def add_product(e, product: dict[str, Any]) -> None:
+        if product["types"] == "liquid":
+            unit_of_measure = "мл."
+        elif product["types"] == "weight":
+            unit_of_measure = "г."
+        else:
+            unit_of_measure = "шт."
+        name = product["name"]
+        id = product["id"]
+
+        text_describe = ft.Text(f"{name}", width=300)
+        field_quantity = ft.TextField(label="Количество", hint_text=f"Введи количество в {unit_of_measure}", width=230)
+        text_types = ft.Text(f"{unit_of_measure}")
+
+        list_view_products_recipe.list_products_id.append(id)  # добавляем номер список продуктов
+
+        row = ft.Row([text_describe, field_quantity, text_types])
+
+        def delete_product_recipe(e, id):
+            list_view_products_recipe.list_products_id.remove(id)
+            text_id.value = f"Ингредиенты в рецепте {list_view_products_recipe.list_products_id}"
+            list_view_products_recipe.controls.remove(e.control)
+            page.update()
+
+        container = ft.Container(content=row, width=600, padding=5, margin=5,
+                                 on_tap_down=lambda e, index=id: delete_product_recipe(e, index), ink=True)
+        container.info_for_post = (id, field_quantity)
+        list_view_products_recipe.controls.append(container)
+        text_id.value = f"Ингредиенты в рецепте {list_view_products_recipe.list_products_id}"
+        page.update()
+
     def add_new_product(e):
         """
         Функция доабвления продукта в базу данных через post запрос,
@@ -58,6 +144,7 @@ def main(page: ft.Page):
         :param e: необазательный парраметр event, не используется в данное функции
         :return: None
         """
+
         data = {}
         name = product_add_name_field.value
         types = product_type_dropdown.value
@@ -100,26 +187,38 @@ def main(page: ft.Page):
                             overflow=ft.TextOverflow.ELLIPSIS,
                             width=250)
 
-        button = ft.FilledButton("Добавить в рецепт", icon="add", on_click=lambda e: add_product(e),
+        button = ft.FilledButton("Добавить в рецепт", icon="add", on_click=lambda e, prod=product: add_product(e, prod),
                                  width=150)
+
+        def delete_product(e, index: int):
+            """Удаление продукта из базы данных."""
+            result = requests.get(f"http://127.0.0.1:8000/list_recipes/delete_product/{index}")
+            dlg = ft.AlertDialog(title=ft.Text("Не удачное удаление"))
+            if result.status_code == 200:
+                update_container_product()
+            else:
+                page.open(dlg)
+
         container = ft.Container(content=ft.Row([text_name, button],
                                                 alignment=ft.MainAxisAlignment.START), padding=7, margin=5,
                                  ink=True, ink_color=ft.colors.RED_400, bgcolor=ft.colors.BLUE_200,
-                                 border_radius=10)
+                                 border_radius=10,
+                                 on_long_press=lambda e, index=product["id"]: delete_product(e, index))
         container.info_product = product
+        container.info_text = text_name
         return container
 
     # Функция для обновления контейнера с продуктами.
     def update_container_product() -> None:
-        products_info = requests.get("http://127.0.0.1:8000/list_recipes/all_product").json()
+        nonlocal info_products
+        info_products = requests.get("http://127.0.0.1:8000/list_recipes/all_product").json()
         list_container_product = [
-            products_text(product) for product in products_info
+            products_text(product) for product in info_products
         ]
         list_container_product.append(container_add_product)
-        container_product.content = ft.ListView(controls=list_container_product, auto_scroll=True,
-                                                height=550, width=700)
+        list_view.controls.clear()
+        list_view.controls.extend(list_container_product)
         page.update()
-
 
     # Изначальное создание контейнера с продуктами при запуске приложения
     # Создания поля для ввода названия приложения
@@ -151,41 +250,117 @@ def main(page: ft.Page):
     # Добавление в конец списка ряда с полями для добавления нового продукта в базу данных.
     list_container_product.append(container_add_product)
     # Создание прокручиваемого списка продуктов.
-    list_view = ft.ListView(auto_scroll=True,
-                            height=550, width=500)
+    list_view = ft.ListView(auto_scroll=False,
+                            height=850, width=500, expand=1)
     # Добавление в список контенеры с продуктами и ряд с полями для добавления нового продукта в базу данных.
     list_view.controls.extend(list_container_product)
+
     # Запаковывем все в контейнер для дальнейшего использвания
-    container_product = ft.Container(content=list_view, width=450)
+    # Создание кнопки поиска по продуктам.
+    def search_product(e):
+        # products_info = requests.get("http://127.0.0.1:8000/list_recipes/all_product").json()
+        list_container_product = [
+            products_text(product) for product in info_products
+        ]
+        list_container_product = [container for container in list_container_product if
+                                  field_search.value.lower() in container.info_text.value.lower()]
+        list_container_product.append(container_add_product)
+        list_view.controls.clear()
+        list_view.controls.extend(list_container_product)
+        # container_product.content = ft.ListView(controls=list_container_product, auto_scroll=True,
+        #                                         height=550, width=700)
+        page.update()
+
+    field_search = ft.TextField(label="Поиск", hint_text="Введите название продукта", width=150,
+                                on_change=search_product)
+    button_search = ft.FilledButton("Поиск", icon="search", on_click=lambda e: search_product(e))
+    row_search = ft.Row(spacing=5, controls=[field_search, button_search], wrap=True)
+
+    container_product = ft.Container(content=ft.Column([row_search, list_view], expand=1))
+
+    # Создание контейнера с полями для ввода названия, описания рецепта с последующем добавлением в базу данных.
+
+    def add_new_recipe(e):
+        """
+        Функция для добавления нового рецепта в базу данных.
+        :param e:
+        :return:
+        """
+        recipe = {
+            "title": recipe_tittle_field.value,
+            "description": recipe_description_field.value
+        }
+        list_tuple_index_quantity = [(control.info_for_post[0], control.info_for_post[1].value) for control in
+                                     list_view_products_recipe.controls if not isinstance(control, ft.Text)]
+
+
+
+        data = {
+            "recipe": recipe,
+            "prod": {
+                "products": list_tuple_index_quantity
+            }
+        }
+
+        result = requests.post("http://127.0.0.1:8000/list_recipes/add_recipe", json=data)
+
+        if result.status_code == 200:
+            update_recipe_tab()
+            recipe_tittle_field.value = ""
+            recipe_description_field.value = ""
+            list_view_products_recipe.controls.clear()
+            page.update()
 
 
 
 
+
+    # Функция для обновления контейнера с рецептами.
+
+    # Создание кнопки для добавления рецепта в базу данных.
+    button_add_recipe = ft.FilledButton("Добавить", icon="add", on_click=lambda e: add_new_recipe(e))
+
+    # Cоздание поля для ввода названия рецепта.
     recipe_tittle_field = ft.TextField(label="Название рецепта", hint_text="Введите название рецепта",
-                                       multiline=False, width=600)
+                                       multiline=False, expand=1)
+
+    # Создание поля для ввода описания рецепта.
     recipe_description_field = ft.TextField(
         label="Описание рецепта",
         hint_text="Введите описание рецепта",
         multiline=True,
-        min_lines=1, max_lines=10, width=600,
-        height=500
+        min_lines=1, max_lines=10,
+        expand=4
     )
-    column_field_recipe = ft.Container(content=ft.Column([recipe_tittle_field, recipe_description_field]),
+
+    list_view_products_recipe = ft.ListView(height=450, expand=5)
+    list_view_products_recipe.list_products_id = []
+    text_id = ft.Text(f"Ингредиенты а рецепте {list_view_products_recipe.list_products_id}")
+    list_view_products_recipe.controls.append(text_id)
+
+    # Создание контейнера с созданными полями для ввода.
+    column_field_recipe = ft.Container(content=ft.Column([button_add_recipe,
+                                                          recipe_tittle_field,
+                                                          recipe_description_field,
+                                                          list_view_products_recipe],
+                                                         expand=False,
+                                                         alignment=ft.alignment.center),
                                        padding=10,
-                                       width=600,
-                                       alignment=ft.alignment.top_left)
+                                       height=900,
+                                       width=700,
+                                       expand=2,
+                                       alignment=ft.alignment.center
+                                       )
 
+    # Создание финалльного ряда а затем и вкладки для добавления рецепта в базу данных.
+    row_field_recipe_and_product = ft.Row(spacing=10, controls=[column_field_recipe, container_product],
+                                          alignment=MainAxisAlignment.CENTER,
+                                          expand=True)
 
-
-
-
-    row_field_recipe_and_product = ft.Row(spacing=10, controls=[column_field_recipe, container_product], wrap=True,
-                                          alignment=MainAxisAlignment.START)
-
-    recipe_post_tab = ft.Tab(text="Добавить рецпты", content=row_field_recipe_and_product)
+    recipe_post_tab = ft.Tab(text="Добавить рецeпты", content=row_field_recipe_and_product)
 
     t = ft.Tabs(
-        tabs=[recipe_tab, recipe_post_tab]
+        tabs=[recipe_tab, recipe_post_tab], expand=True
     )
     page.add(t)
 

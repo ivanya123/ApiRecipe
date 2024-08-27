@@ -24,8 +24,8 @@ class Recipe(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[Optional[str]]
-    products = relationship("ProductsRecipe", back_populates="recipe")
-
+    products = relationship("ProductsRecipe", back_populates="recipe", cascade="all, delete-orphan")
+    changes = relationship("ChangeRecipe", back_populates="recipe", cascade="all, delete-orphan")
 
 class Products(Base):
     __tablename__ = "products"
@@ -34,7 +34,7 @@ class Products(Base):
     name: Mapped[str]
     types: Mapped[TypeProduct] = mapped_column(nullable=False)
     calories_per_100: Mapped[Optional[float]]
-    recipe = relationship("ProductsRecipe", back_populates="product")
+    recipe = relationship("ProductsRecipe", back_populates="product", cascade="all, delete-orphan")
 
 
 class ProductsRecipe(Base):
@@ -46,3 +46,12 @@ class ProductsRecipe(Base):
 
     recipe = relationship("Recipe", back_populates="products")
     product = relationship("Products", back_populates="recipe")
+
+
+class ChangeRecipe(Base):
+    __tablename__ = "change_recipe"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipe.id", ondelete="CASCADE"), nullable=False)
+
+    recipe = relationship("Recipe", back_populates="changes")
