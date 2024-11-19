@@ -1,3 +1,4 @@
+import datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -9,6 +10,11 @@ class ProdPy(BaseModel):
     name: str
     types: TypeProduct
     calories_per_100: Optional[float] = None
+    category_id: Optional[int] = None
+
+
+
+
 
 
 class RecipePy(BaseModel):
@@ -18,3 +24,8 @@ class RecipePy(BaseModel):
 
 class PrInProdPy(BaseModel):
     products: list[tuple[int, float]] = []
+
+
+class Fridge(BaseModel):
+    pass
+

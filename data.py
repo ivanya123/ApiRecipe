@@ -5,7 +5,7 @@ from shemas import RecipePy, PrInProdPy, ProdPy
 
 if __name__ == '__main__':
     # asyncio.run(drop_table())
-    asyncio.run(create_table())
+    # asyncio.run(create_table())
     asyncio.run(get_all_recipe())
     # recipe = {
     #     "title": "test",
