@@ -1,9 +1,10 @@
+import enum
+from datetime import date
 from typing import Optional
+
+from sqlalchemy import Integer, ForeignKey
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import Integer, ForeignKey, Date
-import enum
-from datetime import datetime
 
 engine = create_async_engine("sqlite+aiosqlite:///./recipes.db", echo=True)
 as_session = async_sessionmaker(engine, expire_on_commit=False)
@@ -35,15 +36,18 @@ class Category(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False, unique=True)
 
-    products = relationship("Products", back_populates="category")
+    products = relationship(
+        "Products",
+        secondary="products_categories",  # Указываем промежуточную таблицу
+        back_populates="categories"
+    )
 
 
 class Products(Base):
     __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    category_id: Mapped[Optional[int]] = mapped_column(ForeignKey("category.id"))
-    name: Mapped[str]
+    name: Mapped[str] = mapped_column(nullable=False, unique=True)
     types: Mapped[TypeProduct] = mapped_column(nullable=False)
     calories_per_100: Mapped[Optional[float]]
     shelf_life_close: Mapped[Optional[int]]
@@ -51,7 +55,18 @@ class Products(Base):
 
     recipe = relationship("ProductsRecipe", back_populates="product", cascade="all, delete-orphan")
     fridge = relationship("Fridge", back_populates="product", cascade="all, delete-orphan")
-    category = relationship("Category", back_populates="products")
+    categories = relationship(
+        "Category",
+        secondary="products_categories",  # Указываем промежуточную таблицу
+        back_populates="products"
+    )
+
+
+class ProductsCategories(Base):
+    __tablename__ = "products_categories"
+
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("category.id", ondelete="CASCADE"), primary_key=True)
 
 
 class ProductsRecipe(Base):
@@ -77,11 +92,12 @@ class ChangeRecipe(Base):
 class Fridge(Base):
     __tablename__ = "fridge"
 
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     quantity: Mapped[float] = mapped_column(nullable=False)
-    start_open: Mapped[Optional[Date]] = mapped_column(default=None)
-    shelf_life_close: Mapped[Date]
-    shelf_life_open: Mapped[Date]
-    close: mapped_column(default=True)
+    start_open: Mapped[Optional[date]] = mapped_column(default=None)
+    shelf_life_close: Mapped[date]
+    shelf_life_open: Mapped[date]
+    close: Mapped[bool] = mapped_column(default=True)
 
     product = relationship("Products", back_populates="fridge")
