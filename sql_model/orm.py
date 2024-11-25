@@ -3,9 +3,9 @@ import asyncio
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload, joinedload
 
-from shemas import ProdPy, RecipePy, PrInProdPy
+from shemas import ProdPy, RecipePy, PrInProdPy, UpdateFridgePy, FridgePy
 from sql_model.models import Base, Recipe, ProductsRecipe, Products, engine, as_session, ChangeRecipe, Category, \
-    ProductsCategories
+    ProductsCategories, Fridge
 
 
 async def create_table():
@@ -89,8 +89,22 @@ async def add_new_recipe(recipe: RecipePy, products_tuple: PrInProdPy) -> Recipe
 
 async def get_all_products():
     async with as_session() as session:
-        result = await session.execute(select(Products))
-        products = result.scalars().all()
+        result = await session.execute(select(Products).options(
+            joinedload(Products.categories)
+        ))
+        products = result.scalars().unique().all()
+        return products
+
+
+async def get_all_product_category(id: int) -> list[Products]:
+    async with as_session() as session:
+        result = await session.execute(
+            select(Products)
+            .join(ProductsCategories)
+            .where(ProductsCategories.category_id == id)
+            .options(selectinload(Products.categories))
+        )
+        products: list[Products] = result.scalars().all()
         return products
 
 
@@ -155,18 +169,28 @@ async def delete_recipe(id: int):
 
 async def update_product(id, prod_py: ProdPy):
     async with as_session() as session:
-        result = await session.execute(select(Products).where(Products.id == id))
+        result = await session.execute(
+            select(Products).options(joinedload(Products.categories)).where(Products.id == id))
+        categories_product = await session.execute(
+            select(ProductsCategories).where(ProductsCategories.product_id == id))
         product = result.scalars().first()
-        prod_dict = prod_py.model_dump()
-        product.name = prod_dict["name"]
-        product.types = prod_dict["types"]
-        product.calories_per_100g = prod_dict["calories_per_100g"]
+        categories_product = categories_product.scalars().all()
+        for categ_pr in categories_product:
+            await session.delete(categ_pr)
+        dict_product = prod_py.model_dump()
+        new_categories = dict_product.pop('categories')
+        for key, value in dict_product.items():
+            setattr(product, key, value)
+        list_new_categories = [ProductsCategories(product_id=product.id,
+                                                  category_id=new_category)
+                               for new_category in new_categories]
+        session.add_all(list_new_categories)
         await session.flush()
         await session.commit()
         return product
 
 
-async def update_recipe(id, recipe_py: RecipePy, products_tuple: PrInProdPy):
+async def update_recipe(id, recipe_py: RecipePy, list_products: PrInProdPy):
     async with as_session() as session:
         result = await session.execute(
             select(Recipe).options(
@@ -178,24 +202,59 @@ async def update_recipe(id, recipe_py: RecipePy, products_tuple: PrInProdPy):
         for key, value in recipe_dict.items():
             setattr(recipe, key, value)
 
-        current_products = {pr.product_id: pr for pr in recipe.products}
+        old_products = {pr.product_id: pr for pr in recipe.products}
 
-        for prod_id, quantity in products_tuple.products:
-            if prod_id in current_products:
-                current_products[prod_id].quantity = quantity
-                del current_products[prod_id]
+        for product_dict in list_products['products']:
+            if product_dict['product_id'] in old_products:
+                old_products[product_dict['product_id']].quantity = product_dict['quantity']
+                del old_products[product_dict['product_id']]
             else:
-                new_product = ProductsRecipe(recipe_id=id, product_id=prod_id, quantity=quantity)
+                new_product = ProductsRecipe(recipe_id=id, product_id=product_dict['product_id'],
+                                             quantity=product_dict['quantity'])
                 session.add(new_product)
 
-        for prod_id in current_products:
-            await session.delete(current_products[prod_id])
+        for prod_id in old_products:
+            await session.delete(old_products[prod_id])
 
         res_change = await session.execute(select(ChangeRecipe).where(ChangeRecipe.recipe_id == id))
         change_recipe = res_change.scalars().first()
         await session.delete(change_recipe)
 
         await session.commit()
+
+
+async def update_fridge(list_products: UpdateFridgePy) -> None:
+    change_id = [fridge_product.id for fridge_product in list_products.products if fridge_product.id]
+    async with as_session() as session:
+        change_product = await session.execute(select(Fridge).where(Fridge.id.in_(change_id)))
+        change_product = change_product.scalars().all()
+
+        for product in change_product:
+            for update_product in list_products.products:
+                if update_product.id == product.id:
+                    dict_product = update_product.model_dump()
+                    for key, value in dict_product.items():
+                        setattr(product, key, value)
+
+        new_products: list[dict] = [fridge_product.model_dump() for fridge_product in list_products.products if not fridge_product.id]
+        for product in new_products:
+            del product['id']
+
+        list_new_products = [Fridge(**product) for product in new_products]
+        session.add_all(list_new_products)
+
+        await session.flush()
+        await session.commit()
+
+
+async def get_fridge():
+    async with as_session() as session:
+        result = await session.execute(select(Fridge).options(joinedload(Fridge.product)))
+        result = result.scalars().all()
+        return result
+
+
+
 
 
 async def main():

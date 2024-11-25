@@ -37,9 +37,14 @@ class PrInProdPy(BaseModel):
 
 # Модель для данных холодильника
 class FridgePy(BaseModel):
+    id: Optional[int]
     product_id: int
     quantity: float
     start_open: Optional[str] = None
     shelf_life_close: Optional[str] = None
     shelf_life_open: Optional[str] = None
     close: bool = True
+
+
+class UpdateFridgePy(BaseModel):
+    products: List[FridgePy]

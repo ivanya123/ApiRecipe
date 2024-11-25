@@ -96,8 +96,8 @@ class Fridge(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     quantity: Mapped[float] = mapped_column(nullable=False)
     start_open: Mapped[Optional[date]] = mapped_column(default=None)
-    shelf_life_close: Mapped[date]
-    shelf_life_open: Mapped[date]
+    shelf_life_close: Mapped[Optional[date]]
+    shelf_life_open: Mapped[Optional[date]]
     close: Mapped[bool] = mapped_column(default=True)
 
     product = relationship("Products", back_populates="fridge")
