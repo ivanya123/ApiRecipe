@@ -1,11 +1,16 @@
 import asyncio
 
-from sqlalchemy import select
+from sqlalchemy import select, update, delete
 from sqlalchemy.orm import selectinload, joinedload
 
-from shemas import ProdPy, RecipePy, PrInProdPy, UpdateFridgePy, FridgePy
+from shemas import ProdPy, RecipePy, PrInProdPy, UpdateFridgePy
 from sql_model.models import Base, Recipe, ProductsRecipe, Products, engine, as_session, ChangeRecipe, Category, \
     ProductsCategories, Fridge
+
+
+async def get_by_id(model, id, session):
+    result = await session.execute(select(model).where(model.id == id))
+    return result.scalars().first()
 
 
 async def create_table():
@@ -29,6 +34,8 @@ async def add_category(name: str) -> Category:
 async def delete_category(id: int) -> None:
     async with as_session() as session:
         category = await session.execute(select(Category).where(Category.id == id))
+        if not category:
+            raise ValueError(f'Отсутствует категория {id}')
         category = category.scalars().first()
         session.delete(category)
         await session.commit()
@@ -36,7 +43,7 @@ async def delete_category(id: int) -> None:
 
 async def update_category(id: int, name: str) -> Category:
     async with as_session() as session:
-        category = await session.execute(select(Category).where(Category.id == id))
+        category = await get_by_id(Category, id, session)
         category = category.scalars().first()
         category.name = name
         await session.commit()
@@ -104,6 +111,8 @@ async def get_all_product_category(id: int) -> list[Products]:
             .where(ProductsCategories.category_id == id)
             .options(selectinload(Products.categories))
         )
+        if not result:
+            raise ValueError(f'Отсутствует продукты в категории {id} или сама категория.')
         products: list[Products] = result.scalars().all()
         return products
 
@@ -125,6 +134,8 @@ async def delete_product(id: int):
             .options(selectinload(Products.recipe).selectinload(ProductsRecipe.recipe))
             .where(Products.id == id)
         )
+        if not result:
+            raise ValueError(f'Отсутствует продукт {id}')
 
         res_wait_change_recipe: list[ChangeRecipe] = await session.execute(
             select(ChangeRecipe)
@@ -153,41 +164,52 @@ async def get_change_recipe():
 
 async def delete_wait_change_recipe(id: int):
     async with as_session() as session:
-        result = await session.execute(select(ChangeRecipe).where(ChangeRecipe.id == id))
-        recipe = result.scalars().first()
+        recipe = await get_by_id(ChangeRecipe, id, session)
         await session.delete(recipe)
         await session.commit()
 
 
 async def delete_recipe(id: int):
     async with as_session() as session:
-        result = await session.execute(select(Recipe).where(Recipe.id == id))
-        recipe = result.scalars().first()
+        recipe = await get_by_id(Recipe, id, session)
         await session.delete(recipe)
         await session.commit()
 
 
-async def update_product(id, prod_py: ProdPy):
+async def update_product(id: int, prod_py: ProdPy):
     async with as_session() as session:
+        # Получение продукта
         result = await session.execute(
-            select(Products).options(joinedload(Products.categories)).where(Products.id == id))
-        categories_product = await session.execute(
-            select(ProductsCategories).where(ProductsCategories.product_id == id))
+            select(Products).options(joinedload(Products.categories)).where(Products.id == id)
+        )
         product = result.scalars().first()
-        categories_product = categories_product.scalars().all()
-        for categ_pr in categories_product:
-            await session.delete(categ_pr)
+        if not product:
+            raise ValueError(f"Продукт с id {id} не найден.")
+
+        # Удаление текущих категорий
+        await session.execute(
+            delete(ProductsCategories).where(ProductsCategories.product_id == id)
+        )
+
+        # Обновление данных продукта
         dict_product = prod_py.model_dump()
-        new_categories = dict_product.pop('categories')
-        for key, value in dict_product.items():
-            setattr(product, key, value)
-        list_new_categories = [ProductsCategories(product_id=product.id,
-                                                  category_id=new_category)
-                               for new_category in new_categories]
-        session.add_all(list_new_categories)
-        await session.flush()
+        new_categories = dict_product.pop("categories")
+        await session.execute(
+            update(Products).where(Products.id == id).values(**dict_product)
+        )
+
+        # Добавление новых категорий
+        if new_categories:
+            new_categories_data = [
+                ProductsCategories(product_id=id, category_id=category_id)
+                for category_id in new_categories
+            ]
+            session.add_all(new_categories_data)
+
+        # Сохранение изменений
         await session.commit()
         return product
+
 
 
 async def update_recipe(id, recipe_py: RecipePy, list_products: PrInProdPy):
@@ -236,7 +258,8 @@ async def update_fridge(list_products: UpdateFridgePy) -> None:
                     for key, value in dict_product.items():
                         setattr(product, key, value)
 
-        new_products: list[dict] = [fridge_product.model_dump() for fridge_product in list_products.products if not fridge_product.id]
+        new_products: list[dict] = [fridge_product.model_dump() for fridge_product in list_products.products if
+                                    not fridge_product.id]
         for product in new_products:
             del product['id']
 
@@ -252,9 +275,6 @@ async def get_fridge():
         result = await session.execute(select(Fridge).options(joinedload(Fridge.product)))
         result = result.scalars().all()
         return result
-
-
-
 
 
 async def main():

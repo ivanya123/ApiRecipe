@@ -26,6 +26,7 @@ class Recipe(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[Optional[str]]
+
     products = relationship("ProductsRecipe", back_populates="recipe", cascade="all, delete-orphan")
     changes = relationship("ChangeRecipe", back_populates="recipe", cascade="all, delete-orphan")
 

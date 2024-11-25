@@ -7,7 +7,7 @@ from shemas import RecipePy, PrInProdPy, ProdPy, ProductQuantity, UpdateFridgePy
 
 async def main():
     result = await get_fridge()
-    print(result[0].product.calories_per_100)
+    print(result[0].quantity)
 
 
 if __name__ == '__main__':
